@@ -75,21 +75,23 @@ export async function analyzeRuleText(text: string): Promise<LangChainParseResul
   // Create the parser
   const parser = StructuredOutputParser.fromZodSchema(createRuleParsingSchema());
   const formatInstructions = parser.getFormatInstructions();
+  const escapedFormatInstructions = formatInstructions.replace(/{/g, '{{').replace(/}/g, '}}');
   
-  // Create the system and human messages
+  // Then use the escaped version in your template
   const systemTemplate = `You are an expert system that analyzes automation rule descriptions and extracts structured data.
+    
+  You need to identify:
+  1. The trigger event that starts the workflow
+  2. Any conditions that should filter when the rule runs (optional)
+  3. The action that should be performed
+  4. Whether the action is immediate or delayed
+  5. If delayed, how long the delay should be (in minutes)
   
-You need to identify:
-1. The trigger event that starts the workflow
-2. Any conditions that should filter when the rule runs (optional)
-3. The action that should be performed
-4. Whether the action is immediate or delayed
-5. If delayed, how long the delay should be (in minutes)
-
-${formatInstructions}`;
+  ${escapedFormatInstructions}`;
 
   const humanTemplate = "Rule description: {text}";
-  
+
+
   // Create the prompt
   const prompt = ChatPromptTemplate.fromMessages([
     SystemMessagePromptTemplate.fromTemplate(systemTemplate),
@@ -129,17 +131,17 @@ ${formatInstructions}`;
  */
 export async function generateRuleDescription(rule: Rule): Promise<string> {
   // Create the model
-  const model = createChatModel({ temperature: 0.7, modelName: "gpt-3.5-turbo" });
+  const model = createChatModel({ temperature: 0.7, modelName: "gpt-4" });
   
   // Create the system and human messages
   const systemTemplate = `You are an expert system that generates clear, concise descriptions of automation rules.
 Given the components of a rule, create a human-readable description of what the rule does.`;
 
   const humanTemplate = `Create a concise one-sentence description of this automation rule:
-- Trigger: {trigger}
-- Action: {action}
-- Timing: {schedule} {delay}
-- Conditions: {conditions}`;
+- Trigger: {{trigger}}
+- Action: {{action}}
+- Timing: {{schedule}} {{delay}}
+- Conditions: {{conditions}}`;
   
   // Create the prompt
   const prompt = ChatPromptTemplate.fromMessages([
