@@ -1,3 +1,6 @@
+# Notice
+
+Only MVP is complete! While it includes the core features, along w/ some additional enhancements and features, some real functionality related to workflows are needed to mkae this tool more robust. Will work on that next. Have one hour left. 
 # Workflow Orchestrator
 
 A lightweight workflow orchestration tool built with Next.js, Tailwind CSS, and React Flow.
