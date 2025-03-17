@@ -370,63 +370,63 @@ const hospitalityTriggers: Trigger[] = [
         required: false,
         description: 'ID of the person who reported the issue',
         default: ''
+      }
+    ]
+  }, 
+  {
+    id: 'new_message',
+    name: 'New message received',
+    description: 'Triggered when a new message is received',
+    category: 'communication',
+    parameters: [
+      {
+        name: 'messageId',
+        type: 'string',
+        required: true,
+        description: 'ID of the message'
+      }
+    ]
+  },
+  {
+    id: 'scheduled_time',
+    name: 'Scheduled time reached',
+    description: 'Triggered at a specific time',
+    category: 'time',
+    parameters: [
+      {
+        name: 'time',
+        type: 'datetime',
+        required: true,
+        description: 'The scheduled time'
+      }
+    ]
+  },
+  {
+    id: 'test_failure',
+    name: 'Test Failure Action',
+    description: 'An action that fails on purpose for testing error handling',
+    category: 'testing',
+    parameters: [
+      {
+        name: 'shouldFail',
+        type: 'boolean',
+        required: false,
+        description: 'Whether this action should fail',
+        default: true
       },
       {
-        id: 'new_message',
-        name: 'New message received',
-        description: 'Triggered when a new message is received',
-        category: 'communication',
-        parameters: [
-          {
-            name: 'messageId',
-            type: 'string',
-            required: true,
-            description: 'ID of the message'
-          }
-        ]
+        name: 'failureMessage',
+        type: 'string',
+        required: false,
+        description: 'Custom failure message',
+        default: 'Intentional test failure'
       },
       {
-        id: 'scheduled_time',
-        name: 'Scheduled time reached',
-        description: 'Triggered at a specific time',
-        category: 'time',
-        parameters: [
-          {
-            name: 'time',
-            type: 'datetime',
-            required: true,
-            description: 'The scheduled time'
-          }
-        ]
-      },
-      {
-        id: 'test_failure',
-        name: 'Test Failure Action',
-        description: 'An action that fails on purpose for testing error handling',
-        category: 'testing',
-        parameters: [
-          {
-            name: 'shouldFail',
-            type: 'boolean',
-            required: false,
-            description: 'Whether this action should fail',
-            default: true
-          },
-          {
-            name: 'failureMessage',
-            type: 'string',
-            required: false,
-            description: 'Custom failure message',
-            default: 'Intentional test failure'
-          },
-          {
-            name: 'failureType',
-            type: 'string',
-            required: false,
-            description: 'Type of failure to simulate',
-            default: 'error' // Options: error, timeout, intermittent
-          }
-        ]
+        name: 'failureType',
+        type: 'string',
+        required: false,
+        description: 'Type of failure to simulate',
+        default: 'error' // Options: error, timeout, intermittent
       }
     ]
   }
