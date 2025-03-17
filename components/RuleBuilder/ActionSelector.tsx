@@ -1,179 +1,253 @@
-import React, { useState, ChangeEvent,  FormEvent } from 'react';
-import { getAllActions, getActionsByCategory } from '../../lib/actions';
+import React, { useState, useEffect } from 'react';
+import { getAllActions, getActionById } from '../../lib/actions';
 import { Action } from '../../types';
 
 interface ActionSelectorProps {
-  onSelect: (actionId: string, params?: Record<string, any>) => void;
+  selectedActionId: string;
+  onSelectAction: (actionId: string) => void;
+  parameters: Record<string, any>;
+  onParametersChange: (parameters: Record<string, any>) => void;
 }
 
-const ActionSelector: React.FC<ActionSelectorProps> = ({ onSelect }) => {
-  const [selectedCategory, setSelectedCategory] = useState<string>('all');
+const ActionSelector: React.FC<ActionSelectorProps> = ({
+  selectedActionId,
+  onSelectAction,
+  parameters,
+  onParametersChange
+}) => {
+  const [actions, setActions] = useState<Action[]>([]);
   const [selectedAction, setSelectedAction] = useState<Action | null>(null);
-  const [actionParams, setActionParams] = useState<Record<string, any>>({});
-  const allActions = getAllActions();
   
-  // Get unique categories from all actions
-  const categories: string[] = ['all', ...Array.from(new Set(allActions.map(action => action.category)))];
+  // Load all available actions
+  useEffect(() => {
+    const allActions = getAllActions();
+    setActions(allActions);
+  }, []);
   
-  // Filter actions by selected category
-  const filteredActions: Action[] = selectedCategory === 'all' 
-    ? allActions 
-    : getActionsByCategory(selectedCategory);
+  // Update selectedAction when selectedActionId changes
+  useEffect(() => {
+    if (selectedActionId) {
+      const action = getActionById(selectedActionId);
+      setSelectedAction(action || null);
+      
+      // Initialize parameters for the newly selected action
+      if (action) {
+        // Create default parameters if they don't exist or if switching to a different action
+        const initialParams: Record<string, any> = {};
+        
+        action.parameters.forEach(param => {
+          // Use existing parameter value if it exists, otherwise use default
+          if (parameters && parameters[param.name] !== undefined) {
+            initialParams[param.name] = parameters[param.name];
+          } else {
+            initialParams[param.name] = param.default !== undefined ? param.default : '';
+          }
+        });
+        
+        // Only update parameters if they're different
+        if (JSON.stringify(initialParams) !== JSON.stringify(parameters)) {
+          onParametersChange(initialParams);
+        }
+      }
+    } else {
+      setSelectedAction(null);
+    }
+  }, [selectedActionId]);
   
   // Handle action selection
-  const handleActionClick = (action: Action): void => {
-    setSelectedAction(action);
-    
-    // Initialize parameters with default values
-    const initialParams: Record<string, any> = {};
-    action.parameters.forEach(param => {
-      if (param.default !== undefined) {
-        initialParams[param.name] = param.default;
-      } else if (param.type === 'boolean') {
-        initialParams[param.name] = false;
-      } else {
-        initialParams[param.name] = '';
-      }
+  const handleActionSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const actionId = e.target.value;
+    onSelectAction(actionId);
+  };
+  
+  // Handle parameter change
+  const handleParameterChange = (paramName: string, value: any) => {
+    onParametersChange({
+      ...parameters,
+      [paramName]: value
     });
-    
-    setActionParams(initialParams);
   };
   
-  // Handle parameter input change
-  const handleParamChange = (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>): void => {
-    const { name, value, type } = e.target;
-    const isCheckbox = (e.target as HTMLInputElement).type === 'checkbox';
-    const checked = isCheckbox ? (e.target as HTMLInputElement).checked : undefined;
+  // Render the appropriate input field based on parameter type
+  const renderParameterInput = (param: any) => {
+    const value = parameters[param.name];
     
-    setActionParams(prev => ({
-      ...prev,
-      [name]: isCheckbox ? checked : value
-    }));
-  };
+    switch (param.type) {
+      case 'string':
+        return (
+          <input
+            type="text"
+            value={value || ''}
+            onChange={(e) => handleParameterChange(param.name, e.target.value)}
+            className="w-full border rounded px-3 py-2"
+            placeholder={param.description}
+            required={param.required}
+          />
+        );
+        
+      case 'number':
+        return (
+          <input
+            type="number"
+            value={value !== undefined ? value : ''}
+            onChange={(e) => handleParameterChange(param.name, e.target.valueAsNumber)}
+            className="w-full border rounded px-3 py-2"
+            placeholder={param.description}
+            required={param.required}
+          />
+        );
+        
+      case 'boolean':
+        return (
+          <div className="flex items-center">
+            <input
+              type="checkbox"
+              checked={!!value}
+              onChange={(e) => handleParameterChange(param.name, e.target.checked)}
+              className="h-4 w-4 text-blue-600 border-gray-300 rounded"
+              id={`param-${param.name}`}
+            />
+            <label
+              htmlFor={`param-${param.name}`}
+              className="ml-2 block text-sm text-gray-700"
+            >
+              {param.description}
+            </label>
+          </div>
+        );
+        
+      case 'enum':
+        return (
+          <select
+            value={value || ''}
+            onChange={(e) => handleParameterChange(param.name, e.target.value)}
+            className="w-full border rounded px-3 py-2"
+            required={param.required}
+          >
+            <option value="" disabled>Select an option</option>
+            {param.options?.map((option: string) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
+        );
+        
+      case 'textarea':
+        return (
+          <textarea
+            value={value || ''}
+            onChange={(e) => handleParameterChange(param.name, e.target.value)}
+            className="w-full border rounded px-3 py-2"
+            placeholder={param.description}
+            rows={4}
+            required={param.required}
+          />
+        );
   
-  // Handle form submission
-  const handleSubmit = (e: FormEvent<HTMLFormElement>): void => {
-    e.preventDefault();
-    if (selectedAction) {
-      onSelect(selectedAction.id, actionParams);
+      case 'json':
+        return (
+          <textarea
+            value={typeof value === 'object' ? JSON.stringify(value, null, 2) : (value || '')}
+            onChange={(e) => {
+              try {
+                // Try to parse as JSON
+                const jsonValue = JSON.parse(e.target.value);
+                handleParameterChange(param.name, jsonValue);
+              } catch {
+                // If not valid JSON, store as string
+                handleParameterChange(param.name, e.target.value);
+              }
+            }}
+            className="w-full border rounded px-3 py-2 font-mono"
+            placeholder={param.description}
+            rows={4}
+            required={param.required}
+          />
+        );
+        
+      case 'datetime':
+        return (
+          <input
+            type="datetime-local"
+            value={value || ''}
+            onChange={(e) => handleParameterChange(param.name, e.target.value)}
+            className="w-full border rounded px-3 py-2"
+            required={param.required}
+          />
+        );
+        
+      default:
+        return (
+          <input
+            type="text"
+            value={value || ''}
+            onChange={(e) => handleParameterChange(param.name, e.target.value)}
+            className="w-full border rounded px-3 py-2"
+            placeholder={param.description}
+            required={param.required}
+          />
+        );
     }
   };
   
+  // Group actions by category
+  const actionsByCategory: Record<string, Action[]> = {};
+  actions.forEach(action => {
+    if (!actionsByCategory[action.category]) {
+      actionsByCategory[action.category] = [];
+    }
+    actionsByCategory[action.category].push(action);
+  });
+  
   return (
-    <div>
-      <h2 className="text-xl font-medium mb-4">Step 2: Choose an Action</h2>
-      <p className="text-gray-600 mb-6">
-        Select what should happen when the trigger event occurs.
-      </p>
-      
-      {!selectedAction ? (
-        <>
-          <div className="mb-6">
-            <div className="flex flex-wrap gap-2 mb-4">
-              {categories.map(category => (
-                <button
-                  key={category}
-                  onClick={() => setSelectedCategory(category)}
-                  className={`px-3 py-1 rounded-full text-sm ${
-                    selectedCategory === category
-                      ? 'bg-green-100 text-green-800 border border-green-300'
-                      : 'bg-gray-100 text-gray-600 border border-gray-200 hover:bg-gray-200'
-                  }`}
-                >
-                  {category.charAt(0).toUpperCase() + category.slice(1)}
-                </button>
+    <div className="space-y-4">
+      <div>
+        <label className="block text-sm font-medium mb-1">Select Action *</label>
+        <select
+          value={selectedActionId}
+          onChange={handleActionSelect}
+          className="w-full border rounded px-3 py-2"
+          required
+        >
+          <option value="" disabled>Select an action</option>
+          {Object.entries(actionsByCategory).map(([category, categoryActions]) => (
+            <optgroup key={category} label={category.charAt(0).toUpperCase() + category.slice(1)}>
+              {categoryActions.map(action => (
+                <option key={action.id} value={action.id}>
+                  {action.name}
+                </option>
               ))}
-            </div>
-          </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {filteredActions.map(action => (
-              <div
-                key={action.id}
-                onClick={() => handleActionClick(action)}
-                className="p-4 border rounded-lg cursor-pointer hover:bg-green-50 hover:border-green-300 transition-colors"
-              >
-                <h3 className="font-medium text-lg mb-1">{action.name}</h3>
-                <p className="text-gray-600 text-sm mb-2">{action.description}</p>
-                <div className="text-xs text-gray-500">
-                  Category: {action.category}
-                </div>
+            </optgroup>
+          ))}
+        </select>
+      </div>
+      
+      {selectedAction && selectedAction.parameters.length > 0 && (
+        <div>
+          <label className="block text-sm font-medium mb-1">Configure Parameters</label>
+          <div className="space-y-3 p-3 border rounded bg-gray-50">
+            {selectedAction.parameters.map(param => (
+              <div key={param.name}>
+                <label className="block text-sm mb-1">
+                  {param.name}
+                  {param.required && <span className="text-red-500 ml-1">*</span>}
+                </label>
+                {renderParameterInput(param)}
+                {param.description && !param.type?.includes('boolean') && (
+                  <p className="text-xs text-gray-500 mt-1">{param.description}</p>
+                )}
               </div>
             ))}
           </div>
-        </>
-      ) : (
-        <form onSubmit={handleSubmit}>
-          <div className="mb-4">
-            <h3 className="font-medium text-lg mb-2">{selectedAction.name}</h3>
-            <p className="text-gray-600 mb-4">{selectedAction.description}</p>
-            
-            <div className="space-y-4">
-              {selectedAction.parameters.map(param => (
-                <div key={param.name}>
-                  <label htmlFor={param.name} className="label">
-                    {param.description}
-                    {param.required && <span className="text-red-500 ml-1">*</span>}
-                  </label>
-                  
-                  {param.type === 'text' ? (
-                    <textarea
-                      id={param.name}
-                      name={param.name}
-                      value={actionParams[param.name] || ''}
-                      onChange={handleParamChange}
-                      className="input h-24"
-                      placeholder={`Enter ${param.description.toLowerCase()}`}
-                      required={param.required}
-                    />
-                  ) : param.type === 'boolean' ? (
-                    <div className="flex items-center">
-                      <input
-                        type="checkbox"
-                        id={param.name}
-                        name={param.name}
-                        checked={actionParams[param.name] || false}
-                        onChange={handleParamChange as any}
-                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                      />
-                      <label htmlFor={param.name} className="ml-2 block text-sm text-gray-900">
-                        {param.description}
-                      </label>
-                    </div>
-                  ) : (
-                    <input
-                      type={param.type === 'date' || param.type === 'datetime' ? 'datetime-local' : 'text'}
-                      id={param.name}
-                      name={param.name}
-                      value={actionParams[param.name] || ''}
-                      onChange={handleParamChange}
-                      className="input"
-                      placeholder={`Enter ${param.description.toLowerCase()}`}
-                      required={param.required}
-                    />
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-          
-          <div className="flex justify-between">
-            <button
-              type="button"
-              onClick={() => setSelectedAction(null)}
-              className="btn btn-outline"
-            >
-              Back to Action List
-            </button>
-            
-            <button
-              type="submit"
-              className="btn btn-primary"
-            >
-              Continue
-            </button>
-          </div>
-        </form>
+        </div>
+      )}
+      
+      {selectedAction && (
+        <div className="p-3 border rounded bg-blue-50 text-blue-800">
+          <h4 className="font-medium mb-1">{selectedAction.name}</h4>
+          <p className="text-sm">{selectedAction.description}</p>
+        </div>
       )}
     </div>
   );

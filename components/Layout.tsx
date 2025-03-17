@@ -25,7 +25,7 @@ const Layout: React.FC<LayoutProps> = ({ children, title = 'Workflow Orchestrato
         
         <footer className="bg-gray-100 border-t border-gray-200 py-4">
           <div className="container mx-auto px-4 text-center text-gray-600 text-sm">
-            <p>Workflow Orchestrator &copy; {new Date().getFullYear()}</p>
+            <p>Workflow Orchestrator by SuiteOp &copy; {new Date().getFullYear()}</p>
           </div>
         </footer>
       </div>

@@ -15,13 +15,10 @@ const Settings: NextPage = () => {
           <div className="card">
             <h2 className="text-lg font-medium mb-4">About</h2>
             <p className="text-gray-600 mb-3">
-              Workflow Orchestrator is a minimal tool for creating and managing automation rules.
-            </p>
-            <p className="text-gray-600 mb-3">
-              Built with Next.js, Tailwind CSS, and React Flow.
+              Workflow Orchestrator is a minimal tool for creating and managing automation rules by SuiteOp.
             </p>
             <p className="text-sm text-gray-500">
-              Version 0.1.0
+              Version 0.1.5
             </p>
           </div>
         </div>

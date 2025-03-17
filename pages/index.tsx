@@ -1,20 +1,58 @@
-import React from 'react';
+// pages/index.tsx
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Layout from '../components/Layout';
+import DashboardStats from '../components/Dashboard/DashboardStats';
+import axios from 'axios';
 import { NextPage } from 'next';
 
-interface Stat {
-  label: string;
-  value: number | string;
+interface DashboardStatsData {
+  activeRules: number;
+  executionsToday: number;
+  successRate: string;
+  recentActivity?: Array<{
+    date: string;
+    executions: number;
+    successes: number;
+  }>;
+  dlq?: {
+    total: number;
+    resolved: number;
+    pending: number;
+  };
 }
 
 const Home: NextPage = () => {
-  // Example statistics
-  const stats: Stat[] = [
-    { label: 'Active Rules', value: 0 },
-    { label: 'Executions Today', value: 0 },
-    { label: 'Success Rate', value: '100%' },
-  ];
+  const [statsData, setStatsData] = useState<DashboardStatsData>({
+    activeRules: 0,
+    executionsToday: 0,
+    successRate: '0%',
+    recentActivity: [],
+    dlq: {
+      total: 0,
+      resolved: 0,
+      pending: 0
+    }
+  });
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        setLoading(true);
+        const response = await axios.get<DashboardStatsData>('/api/dashboard/stats');
+        setStatsData(response.data);
+      } catch (err) {
+        console.error('Failed to fetch dashboard stats:', err);
+        setError('Failed to load statistics');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchStats();
+  }, []);
 
   return (
     <Layout title="Home">
@@ -26,13 +64,38 @@ const Home: NextPage = () => {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
-          {stats.map((stat, index) => (
-            <div key={index} className="card text-center">
-              <div className="text-3xl font-bold text-gray-800">{stat.value}</div>
-              <div className="text-sm text-gray-500">{stat.label}</div>
+        {/* Dashboard Stats */}
+        <div className="mb-12">
+          {loading ? (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {[1, 2, 3].map((_, index) => (
+                <div key={index} className="card">
+                  <div className="animate-pulse">
+                    <div className="h-8 bg-gray-200 rounded w-16 mx-auto mb-2"></div>
+                    <div className="h-4 bg-gray-200 rounded w-24 mx-auto"></div>
+                  </div>
+                </div>
+              ))}
             </div>
-          ))}
+          ) : error ? (
+            <div className="card p-4 text-center">
+              <p className="text-red-500">{error}</p>
+              <button 
+                onClick={() => window.location.reload()}
+                className="mt-2 text-blue-500 underline"
+              >
+                Retry
+              </button>
+            </div>
+          ) : (
+            <DashboardStats 
+              activeRules={statsData.activeRules} 
+              executionsToday={statsData.executionsToday} 
+              successRate={statsData.successRate}
+              recentActivity={statsData.recentActivity}
+              dlq={statsData.dlq}
+            />
+          )}
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-12">
