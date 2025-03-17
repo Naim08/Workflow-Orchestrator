@@ -201,9 +201,13 @@ const RuleBuilder: React.FC<RuleBuilderProps> = ({
   };
   
   // Update schedule
-  const handleScheduleChange = (newSchedule: 'immediate' | 'delayed' | 'cron'): void => {
-    setSchedule(newSchedule);
-    markFieldAsTouched('schedule');
+  const handleScheduleChange = (newSchedule: string): void => {
+    if (newSchedule === 'immediate' || newSchedule === 'delayed' || newSchedule === 'cron') {
+      setSchedule(newSchedule);
+      markFieldAsTouched('schedule');
+    } else {
+      console.warn('Invalid schedule value:', newSchedule);
+    }
   };
   
   // Move to next step
