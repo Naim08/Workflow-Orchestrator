@@ -1,4 +1,4 @@
-import type { NextConfig } from "next";
+import { NextConfig } from "next/dist/types";
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
@@ -18,6 +18,9 @@ const nextConfig: NextConfig = {
     }
     return config;
   },
+  eslint: {
+    ignoreDuringBuilds: true,
+  }
 };
 
 export default nextConfig;

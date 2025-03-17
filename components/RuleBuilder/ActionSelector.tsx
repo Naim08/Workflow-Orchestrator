@@ -1,4 +1,4 @@
-import React, { useState, ChangeEvent, FormEvent } from 'react';
+import React, { useState, ChangeEvent,  FormEvent } from 'react';
 import { getAllActions, getActionsByCategory } from '../../lib/actions';
 import { Action } from '../../types';
 

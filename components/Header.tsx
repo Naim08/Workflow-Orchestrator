@@ -1,11 +1,30 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 
 const Header: React.FC = () => {
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState<boolean>(false);
-  
+  const [dlqCount, setDlqCount] = useState<number>(0);
+
+  useEffect(() => {
+    const fetchDlqCount = async () => {
+      try {
+        const response = await fetch('/api/dead-letter-queue?status=pending&limit=1');
+        const data = await response.json();
+        setDlqCount(data.count || 0);
+      } catch (error) {
+        console.error('Error fetching DLQ count:', error);
+      }
+    };
+    
+    fetchDlqCount();
+    
+    // Set up a timer to periodically check for new DLQ items
+    const timer = setInterval(fetchDlqCount, 60000); // Check every minute
+    
+    return () => clearInterval(timer);
+  }, []);
   const toggleMenu = (): void => {
     setMenuOpen(!menuOpen);
   };
@@ -43,6 +62,9 @@ const Header: React.FC = () => {
                 <Link href="/settings" className={`px-3 py-2 rounded-md text-sm font-medium ${isActive('/settings')}`}>
                   Settings
                 </Link>
+                <Link href="/dead-letter-queue" className={`px-3 py-2 rounded-md text-sm font-medium ${isActive('/dead-letter-queue')}`}>
+  DLQ {dlqCount > 0 && <span className="ml-1 px-1.5 py-0.5 bg-red-500 text-white text-xs rounded-full">{dlqCount}</span>}
+</Link>
               </div>
             </div>
           </div>
@@ -85,6 +107,9 @@ const Header: React.FC = () => {
             <Link href="/settings" className={`block px-3 py-2 rounded-md text-base font-medium ${isActive('/settings')}`}>
               Settings
             </Link>
+            <Link href="/dead-letter-queue" className={`px-3 py-2 rounded-md text-sm font-medium ${isActive('/dead-letter-queue')}`}>
+  DLQ {dlqCount > 0 && <span className="ml-1 px-1.5 py-0.5 bg-red-500 text-white text-xs rounded-full">{dlqCount}</span>}
+</Link>
           </div>
         </div>
       )}

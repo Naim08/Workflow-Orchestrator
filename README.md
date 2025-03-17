@@ -120,3 +120,89 @@ MIT
 ![Workflow](./styles/image4.png)
 
 ```
+
+
+
+workflow-orchestrator/
+│
+├── .env.local                   # Environment variables
+├── .gitignore                   # Git ignore file
+├── package.json                 # Project dependencies
+├── next.config.js               # Next.js configuration
+├── postcss.config.js            # PostCSS configuration for Tailwind
+├── tailwind.config.js           # Tailwind configuration
+│
+├── public/                      # Static assets
+│   └── favicon.ico              # Favicon
+│
+├── lib/                         # Shared utilities and functions
+│   ├── triggers.js              # Available triggers
+│   ├── actions.js               # Available actions
+│   ├── supabase.js              # Supabase client setup
+│   └── openai.js                # OpenAI API utilities
+│   └── deadletterqueue.js               
+│   └── langchain.js     
+│   └── errorhandling.js                               
+│   └── workers/            
+│      └── dlqProcessor.js 
+│
+├── components/                  # React components
+│   ├── Layout.jsx               # Main layout component
+│   ├── Header.jsx               # Header component
+│   ├── RuleBuilder/             # Rule Builder components
+│   │   ├── RuleBuilder.jsx      # Main rule builder
+│   │   ├── TriggerSelector.jsx  # Trigger selection component
+│   │   ├── ActionSelector.jsx   # Action selection component
+│   │   └── ScheduleSelector.jsx # Schedule selection component
+│   ├── WorkflowCanvas/          # Workflow Canvas components
+│   │   ├── WorkflowCanvas.jsx   # React Flow canvas for workflows
+│   │   ├── TriggerNode.jsx      # Trigger node component
+│   │   └── ActionNode.jsx       # Action node component
+│   ├── RulesList/               # Rules List components
+│   │   ├── RulesList.jsx        # List of all rules
+│   │   └── RuleItem.jsx         # Individual rule item
+│   ├── Logger/                  # Logging components
+│   │   ├── LogsViewer.jsx       # Logs viewer component
+│   │   └── LogItem.jsx          # Individual log item
+│   └── Settings/                # Settings components
+│       └── ApiKeyForm.jsx       # OpenAI API key form
+│   └── DeadLetterQueue/                
+│       └── DeadLetterQueueViewer.jsx      
+│   ├── AsyncErrorBoundary.jsx 
+│   ├── ErrorBoundary.jsx 
+│
+├── pages/                       # Next.js pages
+│   ├── _app.js                  # Custom App component
+│   ├── index.js                 # Home page
+│   ├── create.js                # Create rule page
+│   ├── rules.js                 # Rules list page
+│   ├── logs.js                  # Logs page
+│   ├── settings.js              # Settings page
+│   ├── simulate.js              # Trigger simulation page
+│   ├── dead-letter-queue.js         
+│   ├── test-error-handling.js              
+│   └── api/                     # API routes
+│       ├── rules/               # Rules API
+│       │   ├── index.js         # GET/POST rules
+│       │   ├── [id].js          # GET/PUT/DELETE specific rule
+│       │   └── trigger.js       # Trigger a rule
+│       ├── openai/              # OpenAI API
+│       │   └── parse.js         # Parse natural language to rule
+│       │   └── advance-parse.js         
+│       │   └── generate-description.js         
+│       ├── logs/                # Logs API
+│       │   └── index.js         # GET logs
+│       └── settings/            # Settings API
+│           └── apiKey.js        # Set OpenAI API key
+│       └── workers/            
+│           └── process-dlq.js        
+│       └── dead-letter-queue/            
+│           └── [id]
+│           └── [id]/retry.js
+│           └── index.js
+│
+└── styles/                      # Styles
+    └── globals.css              # Global styles with Tailwind directives
+└── types/                      # Styles
+    └── errors.ts           
+    └── index.ts

@@ -1,13 +1,26 @@
 import { v4 as uuidv4 } from 'uuid';
 import type { NextApiRequest, NextApiResponse } from 'next';
 import supabase from '../../../lib/supabase';
-import { executeAction } from '../../../lib/actions';
+import { executeActionSafely } from '../../../lib/actions';
 import { getTriggerById } from '../../../lib/triggers';
 import { Rule, TriggerSimulationResponse } from '../../../types';
+import { TriggerError, SchedulingError } from '@/types/errors';
+import { withErrorHandling, logError, withRetry } from '@/lib/errorhandling';
 
 type ApiResponse<T> = 
   | { error: string }
   | T;
+
+interface Condition {
+  field: string;
+  operator: 'equals' | 'not_equals' | 'greater_than' | 'less_than' | 'contains' | 'starts_with' | 'ends_with';
+  value: string | number | boolean;
+}
+
+
+interface Parameters {
+  [key: string]: string | number | boolean;
+}
 
 // Handler for /api/rules/trigger
 export default async function handler(
@@ -23,7 +36,7 @@ export default async function handler(
   try {
     const { triggerId, parameters } = req.body as { 
       triggerId: string; 
-      parameters: Record<string, any> 
+      parameters: Parameters 
     };
     
     // Validation
@@ -32,7 +45,7 @@ export default async function handler(
     }
     
     // Check if the trigger exists
-    const trigger = getTriggerById(triggerId);
+    const trigger = await getTriggerById(triggerId);
     if (!trigger) {
       return res.status(400).json({ error: `Trigger "${triggerId}" not found` });
     }
@@ -62,6 +75,20 @@ export default async function handler(
     
     for (const rule of matchingRules as Rule[]) {
       try {
+        // Check if conditions are met
+        if (!shouldExecuteRule(rule, parameters)) {
+          // Log condition mismatch
+          await supabase.from('logs').insert({
+            id: uuidv4(),
+            type: 'system',
+            ruleName: rule.name,
+            message: `Rule "${rule.name}" conditions not met for trigger "${trigger.name}"`,
+            details: { ruleId: rule.id, triggerId, parameters, conditions: rule.conditions },
+            timestamp: new Date().toISOString()
+          });
+          continue;
+        }
+        
         // Log rule match
         await supabase.from('logs').insert({
           id: uuidv4(),
@@ -74,23 +101,20 @@ export default async function handler(
         
         // For immediate execution
         if (rule.schedule === 'immediate') {
-          // Execute the action
-          const result = await executeAction(rule.actionId, rule.actionParams);
-          
-          // Log the action execution
-          await supabase.from('logs').insert({
-            id: uuidv4(),
-            type: 'action',
-            ruleName: rule.name,
-            message: `Action "${rule.actionId.replace(/_/g, ' ')}" executed for rule "${rule.name}"`,
-            details: result,
-            timestamp: new Date().toISOString()
-          });
+          // Execute the action with error handling
+          await executeActionSafely(
+            rule.actionId, 
+            rule.actionParams, 
+            rule, 
+            { 
+              context: { trigger: { id: triggerId, parameters } } 
+            }
+          );
         } 
         // For delayed execution
         else {
           // Schedule the action for later (using a setTimeout)
-          const delay = rule.delay * 60 * 1000; // convert minutes to milliseconds
+          const delay = rule.delay! * 60 * 1000; // convert minutes to milliseconds
           
           // Log the scheduling
           await supabase.from('logs').insert({
@@ -105,58 +129,77 @@ export default async function handler(
           // Schedule the execution
           setTimeout(async () => {
             try {
-              // Execute the action after the delay
-              const result = await executeAction(rule.actionId, rule.actionParams);
-              
-              // Log the delayed action execution
-              await supabase.from('logs').insert({
-                id: uuidv4(),
-                type: 'action',
-                ruleName: rule.name,
-                message: `Scheduled action "${rule.actionId.replace(/_/g, ' ')}" executed for rule "${rule.name}"`,
-                details: result,
-                timestamp: new Date().toISOString()
-              });
+              // Execute the action after the delay with error handling
+              await executeActionSafely(
+                rule.actionId, 
+                rule.actionParams, 
+                rule, 
+                { 
+                  context: { 
+                    trigger: { id: triggerId, parameters },
+                    scheduledAt: new Date().toISOString(),
+                    delay: rule.delay
+                  } 
+                }
+              );
             } catch (err) {
+              // Error handling is inside executeActionSafely, this is just a fallback
               console.error(`Error executing delayed action for rule ${rule.id}:`, err);
-              
-              // Log the error
-              await supabase.from('logs').insert({
-                id: uuidv4(),
-                type: 'error',
-                ruleName: rule.name,
-                message: `Error executing scheduled action for rule "${rule.name}"`,
-                details: { error: err instanceof Error ? err.message : String(err), rule },
-                timestamp: new Date().toISOString()
-              });
             }
           }, delay);
         }
         
         executedRules.push(rule);
       } catch (ruleError) {
-        console.error(`Error processing rule ${rule.id}:`, ruleError);
+        // Log rule processing error
+        const errorId = await logError(
+          ruleError instanceof Error 
+            ? ruleError 
+            : new TriggerError(`Failed to process rule: ${ruleError}`, rule.id),
+          'System',
+          { ruleId: rule.id, triggerId, parameters }
+        );
         
-        // Log the error
-        await supabase.from('logs').insert({
-          id: uuidv4(),
-          type: 'error',
-          ruleName: rule.name,
-          message: `Error processing rule "${rule.name}"`,
-          details: { error: ruleError instanceof Error ? ruleError.message : String(ruleError), rule },
-          timestamp: new Date().toISOString()
-        });
+        console.error(`Error processing rule ${rule.id}:`, ruleError);
       }
     }
     
-    return res.status(200).json({
-      success: true,
-      triggerId,
-      rulesMatched: matchingRules.length,
-      executedRules
-    });
+    return res.status(200).json({ success: true, triggerId: triggerId, rulesMatched: matchingRules.length, executedRules });
   } catch (error) {
+    const errorId = await logError(
+      error instanceof Error 
+        ? error 
+        : new TriggerError(`Failed to process trigger: ${error}`, req.body?.triggerId || 'unknown'),
+      'System',
+      { body: req.body }
+    );
+    
     console.error('Error processing trigger:', error);
-    return res.status(500).json({ error: 'Failed to process trigger' });
+    return res.status(500).json({ 
+      error: `Failed to process trigger (Error ID: ${errorId})` 
+    });
   }
 }
+
+const shouldExecuteRule = (rule: Rule, parameters: Record<string, any>): boolean => {
+  // If no conditions, always execute
+  if (!rule.conditions || rule.conditions.length === 0) {
+    return true;
+  }
+  
+  // Simple condition checking - you can enhance this based on your conditional logic
+  return rule.conditions.every(condition => {
+    const value = parameters[condition.field];
+    switch (condition.operator) {
+      case 'equals': return value === condition.value;
+      case 'not_equals': return value !== condition.value;
+      case 'contains': return String(value).includes(String(condition.value));
+      // Add other operators as needed
+      default: return true;
+    }
+  });
+};
+
+
+
+

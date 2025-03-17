@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/router';
 import axios from 'axios';
 import RuleItem from './RuleItem';
-import WorkflowCanvas from '../WorkflowCanvas/WorkflowCanvas';
+import RuleDetails from './RuleDetails';
 import { Rule } from '../../types';
 
 const RulesList: React.FC = () => {
+  const router = useRouter();
   const [rules, setRules] = useState<Rule[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -76,6 +78,11 @@ const RulesList: React.FC = () => {
     }
   };
 
+  // Handle edit button click
+  const handleEditRule = (id: string): void => {
+    router.push(`/edit/${id}`);
+  };
+
   if (loading) {
     return <div className="text-center py-8">Loading rules...</div>;
   }
@@ -137,64 +144,10 @@ const RulesList: React.FC = () => {
               <h3 className="text-lg font-medium mb-4">Rule Details</h3>
               
               {selectedRule ? (
-                <div className="space-y-4">
-                  <div>
-                    <h4 className="font-medium text-xl">{selectedRule.name}</h4>
-                    {selectedRule.description && (
-                      <p className="text-gray-600 mt-1">{selectedRule.description}</p>
-                    )}
-                  </div>
-                  
-                  <div className="border-t border-gray-200 pt-4">
-                    <div className="flex items-center justify-between">
-                      <h5 className="text-sm font-medium text-gray-500">WORKFLOW VISUALIZATION</h5>
-                      <div className={`px-2 py-1 rounded-full text-xs ${
-                        selectedRule.enabled
-                          ? 'bg-green-100 text-green-800'
-                          : 'bg-gray-100 text-gray-800'
-                        }`}
-                      >
-                        {selectedRule.enabled ? 'Enabled' : 'Disabled'}
-                      </div>
-                    </div>
-                    
-                    <div className="mt-4">
-                      <WorkflowCanvas rule={selectedRule} />
-                    </div>
-                  </div>
-                  
-                  <div className="border-t border-gray-200 pt-4">
-                    <h5 className="text-sm font-medium text-gray-500 mb-2">RULE DETAILS</h5>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <div className="text-xs text-gray-500">Trigger</div>
-                        <div className="font-medium">
-                          {selectedRule.triggerId.replace(/_/g, ' ')}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-xs text-gray-500">Action</div>
-                        <div className="font-medium">
-                          {selectedRule.actionId.replace(/_/g, ' ')}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-xs text-gray-500">Schedule</div>
-                        <div className="font-medium">
-                          {selectedRule.schedule === 'immediate' 
-                            ? 'Execute immediately' 
-                            : `Execute after ${selectedRule.delay} minutes`}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-xs text-gray-500">Created</div>
-                        <div className="font-medium">
-                          {new Date(selectedRule.createdAt).toLocaleDateString()}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                <RuleDetails 
+                  rule={selectedRule}
+                  onEdit={() => handleEditRule(selectedRule.id)} 
+                />
               ) : (
                 <div className="text-center py-8 text-gray-500">
                   Select a rule to view details

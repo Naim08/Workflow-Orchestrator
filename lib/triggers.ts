@@ -85,6 +85,35 @@ const triggers: Trigger[] = [
         description: 'The scheduled time'
       }
     ]
+  },
+  {
+    id: 'test_failure',
+    name: 'Test Failure Action',
+    description: 'An action that fails on purpose for testing error handling',
+    category: 'testing',
+    parameters: [
+      {
+        name: 'shouldFail',
+        type: 'boolean',
+        required: false,
+        description: 'Whether this action should fail',
+        default: true
+      },
+      {
+        name: 'failureMessage',
+        type: 'string',
+        required: false,
+        description: 'Custom failure message',
+        default: 'Intentional test failure'
+      },
+      {
+        name: 'failureType',
+        type: 'string',
+        required: false,
+        description: 'Type of failure to simulate',
+        default: 'error' // Options: error, timeout, intermittent
+      }
+    ]
   }
 ];
 

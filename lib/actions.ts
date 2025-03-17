@@ -1,4 +1,12 @@
-import { Action, ActionExecutionResult } from '../types';
+
+import { v4 as uuidv4 } from 'uuid';
+import { 
+  withRetry, withErrorHandling, 
+  logError, getCircuitBreaker , addToDeadLetterQueue
+} from './errorhandling';
+import { ActionError } from '@/types/errors';
+import { Action, ActionExecutionResult, Rule } from '../types';
+import supabase from './supabase';
 
 // Define available actions for the system
 const actions: Action[] = [
@@ -152,6 +160,35 @@ const actions: Action[] = [
         description: 'JSON payload'
       }
     ]
+  },
+  {
+    id: 'test_failure',
+    name: 'Test Failure Action',
+    description: 'An action that fails on purpose for testing error handling',
+    category: 'testing',
+    parameters: [
+      {
+        name: 'shouldFail',
+        type: 'boolean',
+        required: false,
+        description: 'Whether this action should fail',
+        default: true
+      },
+      {
+        name: 'failureMessage',
+        type: 'string',
+        required: false,
+        description: 'Custom failure message',
+        default: 'Intentional test failure'
+      },
+      {
+        name: 'failureType',
+        type: 'string',
+        required: false,
+        description: 'Type of failure to simulate',
+        default: 'error' // Options: error, timeout, intermittent
+      }
+    ]
   }
 ];
 
@@ -200,9 +237,45 @@ export function mapNaturalLanguageToActionId(text: string): string {
 
 // Function to execute actions (mocked for MVP)
 export async function executeAction(actionId: string, parameters: Record<string, any>): Promise<ActionExecutionResult> {
+  console.log(`[MOCK] Executing action ${actionId} with parameters:`, parameters);
   const action = getActionById(actionId);
   if (!action) {
     throw new Error(`Action with ID ${actionId} not found`);
+  }
+  
+  // Handle the test failure action
+  if (actionId === 'test_failure') {
+    const shouldFail = parameters.shouldFail !== false; // Default to true
+    const failureMessage = parameters.failureMessage || 'Intentional test failure';
+    const failureType = parameters.failureType || 'error';
+    console.log(`[MOCK] Test failure action: ${failureType} - ${failureMessage}`);
+    if (shouldFail) {
+      switch (failureType) {
+        case 'timeout':
+          // Simulate a timeout
+          await new Promise(resolve => setTimeout(resolve, 10000));
+          throw new Error(`Timeout: ${failureMessage}`);
+          
+        case 'intermittent':
+          // Fail randomly about 75% of the time
+          if (Math.random() < 0.75) {
+            throw new Error(`Intermittent failure: ${failureMessage}`);
+          }
+          break;
+          
+        case 'error':
+        default:
+          // Simple error
+          throw new Error(failureMessage);
+      }
+    }
+    
+    // If we get here, the action "succeeded"
+    return {
+      success: true,
+      message: 'Test action completed successfully',
+      mock: true
+    };
   }
   
   // Mock execution based on action type
@@ -258,6 +331,126 @@ export async function executeAction(actionId: string, parameters: Record<string,
       
     default:
       throw new Error(`Execution for action ${actionId} not implemented`);
+  }
+}
+
+
+export async function executeActionSafely(
+  actionId: string, 
+  parameters: Record<string, any>,
+  rule?: Rule,
+  options: {
+    maxRetries?: number;
+    isRetry?: boolean;
+    context?: Record<string, any>;
+  } = {}
+): Promise<ActionExecutionResult> {
+  const { maxRetries = 3, isRetry = false, context = {} } = options;
+  const action = getActionById(actionId);
+  
+  if (!action) {
+    throw new ActionError(`Action with ID ${actionId} not found`, actionId, parameters);
+  }
+  
+  // Get the circuit breaker for this action type
+  const circuitBreaker = getCircuitBreaker(`action:${actionId}`);
+  
+  // Create a clean execution function
+  const executeActionFunction = async (): Promise<ActionExecutionResult> => {
+    // Start timing the execution
+    const startTime = Date.now();
+    
+    // Execute wrapped in retry logic
+    return await withRetry(
+      async () => {
+        // This is where your original executeAction logic goes
+        const result = await executeAction(actionId, parameters);
+        
+        // Log successful execution
+        await supabase.from('logs').insert({
+          id: uuidv4(),
+          type: 'action',
+          ruleName: rule?.name || 'Manual Action',
+          message: `Action "${action.name}" executed successfully`,
+          details: {
+            actionId,
+            parameters,
+            result,
+            executionTime: Date.now() - startTime,
+            isRetry
+          },
+          timestamp: new Date().toISOString()
+        });
+        
+        return result;
+      },
+      {
+        maxRetries,
+        retryDelayMs: 1000,
+        backoffMultiplier: 2,
+        // Only retry on certain errors - customize as needed
+        retryCondition: (error) => {
+          // Don't retry on invalid parameters or missing resources
+          if (error.message.includes('Invalid parameters') || 
+              error.message.includes('not found')) {
+            return false;
+          }
+          // Retry on transient errors
+          return true;
+        },
+        onRetry: async (error, attempt) => {
+          // Log each retry attempt
+          await supabase.from('logs').insert({
+            id: uuidv4(),
+            type: 'error',
+            ruleName: rule?.name || 'Manual Action',
+            message: `Retry attempt ${attempt}/${maxRetries} for action "${action.name}"`,
+            details: {
+              actionId,
+              parameters,
+              error: error.message,
+              attempt,
+              timestamp: new Date().toISOString()
+            },
+            timestamp: new Date().toISOString()
+          });
+        }
+      }
+    );
+  };
+  
+  try {
+    // Execute with circuit breaker
+    return await circuitBreaker.execute(executeActionFunction);
+  } catch (error: any) {
+    // Enhanced error with action details
+
+    const actionError = new ActionError(
+      error.message || 'Action execution failed',
+      actionId,
+      parameters
+    );
+    
+    // Log the error
+    const errorId = await logError(
+      actionError,
+      rule?.name || 'Manual Action',
+      {
+        actionId,
+        parameters,
+        rule: rule ? { id: rule.id, name: rule.name } : undefined,
+        context
+      }
+    );
+
+    // Add to dead letter queue if this was from a rule
+    if (rule) {
+      await addToDeadLetterQueue(rule, actionError, context);
+    }
+    
+    // Rethrow with error ID for tracking
+    actionError.message = `${actionError.message} (Error ID: ${errorId})`;
+    throw actionError;
   }
 }
 

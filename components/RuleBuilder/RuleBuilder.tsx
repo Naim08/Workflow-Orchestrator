@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import axios from 'axios';
 import TriggerSelector from './TriggerSelector';
@@ -10,13 +10,36 @@ type RuleFormState = Omit<Rule, 'id' | 'enabled' | 'createdAt' | 'updatedAt'> & 
   conditions?: RuleCondition[];
 };
 
-const RuleBuilder: React.FC = () => {
+interface RuleBuilderProps {
+  /** If provided, we are in edit mode and can populate from this existing rule. */
+  initialRule?: Rule;
+  /** True for edit mode, false/undefined for creating a new rule. */
+  isEditing?: boolean;
+  /** Callback if you want to do something after successfully creating/updating. */
+  onSuccess?: () => void;
+}
+
+const RuleBuilder: React.FC<RuleBuilderProps> = ({
+  initialRule,
+  isEditing = false,
+  onSuccess
+}) => {
   const router = useRouter();
-  const [step, setStep] = useState<number>(1);
+
+  // The current step of the wizard (1..4)
+  const [step, setStep] = useState<number>(isEditing ? 1 : 1);
+
+  // For "AI parse" or final submit
   const [loading, setLoading] = useState<boolean>(false);
+
+  // Error message
   const [error, setError] = useState<string | null>(null);
+
+  // For AI-based creation
   const [naturalLanguageInput, setNaturalLanguageInput] = useState<string>('');
   const [parsingResult, setParsingResult] = useState<ParseNaturalLanguageResponse | null>(null);
+
+  // Local form data
   const [rule, setRule] = useState<RuleFormState>({
     name: '',
     description: '',
@@ -25,33 +48,55 @@ const RuleBuilder: React.FC = () => {
     actionId: '',
     actionParams: {},
     schedule: 'immediate',
-    delay: 60, // Default delay in minutes
+    delay: 60,
     conditions: []
   });
 
-  // Handle natural language parsing with LangChain
+  /**
+   * If we are in edit mode and have an initialRule, populate local state.
+   * We jump directly to step 4 so the user sees the final "Review & Save."
+   */
+  useEffect(() => {
+    if (isEditing && initialRule) {
+      setRule({
+        name: initialRule.name || '',
+        description: initialRule.description || '',
+        triggerId: initialRule.triggerId || '',
+        triggerParams: initialRule.triggerParams || {},
+        actionId: initialRule.actionId || '',
+        actionParams: initialRule.actionParams || {},
+        schedule: initialRule.schedule,
+        delay: initialRule.delay,
+        conditions: initialRule.conditions || []
+      });
+    }
+  }, [isEditing, initialRule]);
+
+  /** AI-based parse of natural language input. */
   const handleParseNaturalLanguage = async () => {
     if (!naturalLanguageInput.trim()) {
       setError('Please enter a description of the rule');
       return;
     }
-
     setLoading(true);
     setError(null);
 
     try {
-      // Use the advanced parsing endpoint powered by LangChain
-      const response = await axios.post<ParseNaturalLanguageResponse>('/api/openai/advanced-parse', {
-        text: naturalLanguageInput
-      });
-
+      const response = await axios.post<ParseNaturalLanguageResponse>(
+        '/api/openai/advanced-parse',
+        { text: naturalLanguageInput }
+      );
       const result = response.data;
       setParsingResult(result);
 
-      // Update the rule with the parsed data
-      setRule(prevRule => ({
-        ...prevRule,
-        name: result.description || `Rule from "${naturalLanguageInput.substring(0, 30)}${naturalLanguageInput.length > 30 ? '...' : ''}"`,
+      // Transfer results into local rule state
+      setRule((prev) => ({
+        ...prev,
+        name:
+          result.description ||
+          `Rule from "${naturalLanguageInput.substring(0, 30)}${
+            naturalLanguageInput.length > 30 ? '...' : ''
+          }"`,
         description: result.description || '',
         triggerId: result.triggerId,
         actionId: result.actionId,
@@ -60,7 +105,7 @@ const RuleBuilder: React.FC = () => {
         conditions: result.conditions || []
       }));
 
-      // Move to the appropriate step for confirmation
+      // Move user to step 4 for final review
       setStep(4);
     } catch (err) {
       if (axios.isAxiosError(err)) {
@@ -75,157 +120,177 @@ const RuleBuilder: React.FC = () => {
     }
   };
 
-  // Handle form input changes
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  /** Basic handler for name/description text fields. */
+  const handleInputChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+  ) => {
     const { name, value } = e.target;
-    setRule(prevRule => ({
-      ...prevRule,
-      [name]: value
-    }));
+    setRule((prev) => ({ ...prev, [name]: value }));
   };
 
-  // Handle trigger selection
+  /** Wizard step callback: pick a trigger. */
   const handleTriggerSelect = (triggerId: string, params: Record<string, any> = {}) => {
-    setRule(prevRule => ({
-      ...prevRule,
-      triggerId,
-      triggerParams: params
-    }));
+    setRule((prev) => ({ ...prev, triggerId, triggerParams: params }));
     setStep(2);
   };
 
-  // Handle action selection
+  /** Wizard step callback: pick an action. */
   const handleActionSelect = (actionId: string, params: Record<string, any> = {}) => {
-    setRule(prevRule => ({
-      ...prevRule,
-      actionId,
-      actionParams: params
-    }));
+    setRule((prev) => ({ ...prev, actionId, actionParams: params }));
     setStep(3);
   };
 
-  // Handle schedule selection
+  /** Wizard step callback: pick schedule type. */
   const handleScheduleSelect = (schedule: 'immediate' | 'delayed', delay: number = 60) => {
-    setRule(prevRule => ({
-      ...prevRule,
-      schedule,
-      delay
-    }));
+    setRule((prev) => ({ ...prev, schedule, delay }));
     setStep(4);
   };
 
-  // Handle form submission
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+  /** Submit (step 4). Create with POST, or edit with PUT. */
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
 
     try {
-      await axios.post('/api/rules', rule);
-      router.push('/rules');
+      if (isEditing && initialRule) {
+        // Edit
+        await axios.put(`/api/rules/${initialRule.id}`, {
+          ...rule
+        });
+      } else {
+        // Create
+        await axios.post('/api/rules', rule);
+      }
+
+      if (onSuccess) {
+        onSuccess();
+      } else {
+        router.push('/rules');
+      }
     } catch (err) {
       if (axios.isAxiosError(err)) {
-        setError(err.response?.data?.error || 'Failed to create rule');
+        setError(err.response?.data?.error || 'Failed to save rule');
       } else {
         setError('An unexpected error occurred');
         console.error(err);
       }
+    } finally {
       setLoading(false);
     }
   };
 
-  // Render different steps of the rule builder
-  const renderStep = () => {
+  /**
+   * Renders the content for the current step. Steps 1–3 are plain divs.
+   * Step 4 is returned as a <form> so that Enter or the submit button will only
+   * submit the final step, not the earlier ones.
+   */
+  const renderStepContent = () => {
     switch (step) {
       case 1:
         return <TriggerSelector onSelect={handleTriggerSelect} />;
+
       case 2:
         return <ActionSelector onSelect={handleActionSelect} />;
+
       case 3:
         return <ScheduleSelector onSelect={handleScheduleSelect} schedule={rule.schedule} delay={rule.delay} />;
+
+
       case 4:
+        // Final "Review & Save" step as a form:
         return (
-          <div className="space-y-6">
-            <h2 className="text-xl font-medium">Review and save your rule</h2>
-            
-            <div className="card">
-              <div className="mb-4">
-                <label htmlFor="name" className="label">Rule Name</label>
-                <input
-                  type="text"
-                  id="name"
-                  name="name"
-                  value={rule.name}
-                  onChange={handleInputChange}
-                  className="input"
-                  placeholder="Enter a name for this rule"
-                  required
-                />
-              </div>
-              
-              <div className="mb-4">
-                <label htmlFor="description" className="label">Description (Optional)</label>
-                <textarea
-                  id="description"
-                  name="description"
-                  value={rule.description}
-                  onChange={handleInputChange}
-                  className="input h-24"
-                  placeholder="Add a description to help remember what this rule does"
-                />
-              </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                <div>
-                  <h3 className="font-medium mb-2">Trigger</h3>
-                  <div className="p-3 bg-blue-50 rounded-md border border-blue-200">
-                    {rule.triggerId ? (
-                      <p>{rule.triggerId.replace(/_/g, ' ')}</p>
-                    ) : (
-                      <p className="text-red-500">No trigger selected</p>
-                    )}
-                  </div>
-                </div>
-                
-                <div>
-                  <h3 className="font-medium mb-2">Action</h3>
-                  <div className="p-3 bg-green-50 rounded-md border border-green-200">
-                    {rule.actionId ? (
-                      <p>{rule.actionId.replace(/_/g, ' ')}</p>
-                    ) : (
-                      <p className="text-red-500">No action selected</p>
-                    )}
-                  </div>
-                </div>
-              </div>
-              
-              <div className="mb-6">
-                <h3 className="font-medium mb-2">Schedule</h3>
-                <div className="p-3 bg-purple-50 rounded-md border border-purple-200">
-                  {rule.schedule === 'immediate' ? (
-                    <p>Execute immediately</p>
+          <form onSubmit={handleSubmit} className="card p-4 space-y-4">
+            <h2 className="text-xl font-medium">
+              Review and {isEditing ? 'Update' : 'Save'} Your Rule
+            </h2>
+
+            <div>
+              <label htmlFor="name" className="label">
+                Rule Name
+              </label>
+              <input
+                type="text"
+                id="name"
+                name="name"
+                value={rule.name}
+                onChange={handleInputChange}
+                className="input"
+                placeholder="Enter a name for this rule"
+                required
+              />
+            </div>
+
+            <div>
+              <label htmlFor="description" className="label">
+                Description (Optional)
+              </label>
+              <textarea
+                id="description"
+                name="description"
+                value={rule.description}
+                onChange={handleInputChange}
+                className="input h-24"
+                placeholder="Add a description to help remember what this rule does"
+              />
+            </div>
+
+            {/* Trigger & Action Overview */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <h3 className="font-medium mb-2">Trigger</h3>
+                <div className="p-3 bg-blue-50 rounded-md border border-blue-200">
+                  {rule.triggerId ? (
+                    <p>{rule.triggerId.replace(/_/g, ' ')}</p>
                   ) : (
-                    <p>Execute after {rule.delay} minutes</p>
+                    <p className="text-red-500">No trigger selected</p>
                   )}
                 </div>
               </div>
-              
-              {rule.conditions && rule.conditions.length > 0 && (
-                <div className="mb-6">
-                  <h3 className="font-medium mb-2">Conditions</h3>
-                  <div className="p-3 bg-yellow-50 rounded-md border border-yellow-200">
-                    <ul className="list-disc pl-5">
-                      {rule.conditions.map((condition, index) => (
-                        <li key={index}>
-                          {condition.field} {condition.operator.replace(/_/g, ' ')} {String(condition.value)}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
+              <div>
+                <h3 className="font-medium mb-2">Action</h3>
+                <div className="p-3 bg-green-50 rounded-md border border-green-200">
+                  {rule.actionId ? (
+                    <p>{rule.actionId.replace(/_/g, ' ')}</p>
+                  ) : (
+                    <p className="text-red-500">No action selected</p>
+                  )}
                 </div>
-              )}
-              
-              <div className="flex justify-between">
+              </div>
+            </div>
+
+            <div>
+              <h3 className="font-medium mb-2">Schedule</h3>
+              <div className="p-3 bg-purple-50 rounded-md border border-purple-200">
+                {rule.schedule === 'immediate' ? (
+                  <p>Execute immediately</p>
+                ) : (
+                  <p>Execute after {rule.delay} minutes</p>
+                )}
+              </div>
+            </div>
+
+            {/* Conditions */}
+            {rule.conditions && rule.conditions.length > 0 && (
+              <div>
+                <h3 className="font-medium mb-2">Conditions</h3>
+                <div className="p-3 bg-yellow-50 rounded-md border border-yellow-200">
+                  <ul className="list-disc pl-5">
+                    {rule.conditions.map((condition, index) => (
+                      <li key={index}>
+                        {condition.field} {condition.operator.replace(/_/g, ' ')}{' '}
+                        {String(condition.value)}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            )}
+
+            {/* Buttons */}
+            <div className="flex justify-between">
+              {/* Show "Start Over" if not editing. If editing, you might show "Cancel" etc. */}
+              {!isEditing && (
                 <button
                   type="button"
                   onClick={() => setStep(1)}
@@ -233,98 +298,117 @@ const RuleBuilder: React.FC = () => {
                 >
                   Start Over
                 </button>
-                
-                <button
-                  type="button"
-                  onClick={(e) => handleSubmit(e as any)}
-                  disabled={loading || !rule.triggerId || !rule.actionId}
-                  className="btn btn-primary"
-                >
-                  {loading ? 'Saving...' : 'Save Rule'}
-                </button>
-              </div>
+              )}
+              <button
+                type="submit"
+                disabled={loading || !rule.triggerId || !rule.actionId}
+                className="btn btn-primary"
+              >
+                {loading
+                  ? isEditing
+                    ? 'Updating...'
+                    : 'Saving...'
+                  : isEditing
+                  ? 'Update Rule'
+                  : 'Save Rule'}
+              </button>
             </div>
-          </div>
-        );
-      default:
-        return <div>Unknown step</div>;
-    }
-  };
 
-  return (
-    <div className="max-w-4xl mx-auto">
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold mb-6">Create a New Automation Rule</h1>
-        
-        <div className="mb-6">
-          <div className="card">
-            <h2 className="text-lg font-medium mb-3">Use AI to create a rule</h2>
-            <p className="text-gray-600 mb-4">
-              Describe what you want to automate in plain language, and we'll create a rule for you.
-            </p>
-            
-            <div className="mb-4">
-              <textarea
-                value={naturalLanguageInput}
-                onChange={(e) => setNaturalLanguageInput(e.target.value)}
-                className="input h-24"
-                placeholder="e.g., When a guest checks in, send a welcome email after 30 minutes"
-              />
-            </div>
-            
-            <button
-              type="button"
-              onClick={handleParseNaturalLanguage}
-              disabled={loading || !naturalLanguageInput.trim()}
-              className="btn btn-primary w-full"
-            >
-              {loading ? 'Parsing...' : 'Create Rule with AI'}
-            </button>
-            
+            {/* Show any error from final submission */}
             {error && (
               <div className="mt-4 p-3 bg-red-50 text-red-700 rounded-md border border-red-200">
                 {error}
               </div>
             )}
-          </div>
-        </div>
-        
-        <div className="mb-4">
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-gray-300"></div>
-            </div>
-            <div className="relative flex justify-center">
-              <span className="px-3 bg-white text-gray-500 text-sm">OR CREATE MANUALLY</span>
-            </div>
-          </div>
-        </div>
-        
-        <div className="mb-6">
-          <div className="flex justify-between items-center mb-4">
-            <div className="flex space-x-1">
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step >= 1 ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}>
-                1
+          </form>
+        );
+
+      default:
+        // shouldn't happen, but just in case
+        return null;
+    }
+  };
+
+  return (
+    <div className="max-w-4xl mx-auto">
+      {/* Page Title */}
+      <div className="mb-8">
+        <h1 className="text-2xl font-bold mb-6">
+          {isEditing ? 'Edit Automation Rule' : 'Create a New Automation Rule'}
+        </h1>
+
+        {/* If not editing, show AI-based parse + step indicators. Otherwise, skip them. */}
+        {!isEditing && (
+          <>
+            {/* AI-based creation */}
+            <div className="mb-6">
+              <div className="card">
+                <h2 className="text-lg font-medium mb-3">Use AI to Create a Rule</h2>
+                <p className="text-gray-600 mb-4">
+                  Describe what you want to automate in plain language, and
+                  we’ll try to build a rule for you.
+                </p>
+                <div className="mb-4">
+                  <textarea
+                    value={naturalLanguageInput}
+                    onChange={(e) => setNaturalLanguageInput(e.target.value)}
+                    className="input h-24"
+                    placeholder='e.g., "When a guest checks in, send a welcome email after 30 minutes"'
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={handleParseNaturalLanguage}
+                  disabled={loading || !naturalLanguageInput.trim()}
+                  className="btn btn-primary w-full"
+                >
+                  {loading ? 'Parsing...' : 'Create Rule with AI'}
+                </button>
+                {error && (
+                  <div className="mt-4 p-3 bg-red-50 text-red-700 rounded-md border border-red-200">
+                    {error}
+                  </div>
+                )}
               </div>
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step >= 2 ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}>
-                2
-              </div>
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step >= 3 ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}>
-                3
-              </div>
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step >= 4 ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}>
-                4
+            </div>
+
+            {/* Divider */}
+            <div className="mb-4">
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-gray-300" />
+                </div>
+                <div className="relative flex justify-center">
+                  <span className="px-3 bg-white text-gray-500 text-sm">
+                    OR CREATE MANUALLY
+                  </span>
+                </div>
               </div>
             </div>
-            <div className="text-sm text-gray-500">
-              Step {step} of 4
+
+            {/* Step indicators for steps 1..4 */}
+            <div className="mb-6">
+              <div className="flex justify-between items-center mb-4">
+                <div className="flex space-x-1">
+                  {[1, 2, 3, 4].map((num) => (
+                    <div
+                      key={num}
+                      className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                        step >= num ? 'bg-blue-600 text-white' : 'bg-gray-200'
+                      }`}
+                    >
+                      {num}
+                    </div>
+                  ))}
+                </div>
+                <div className="text-sm text-gray-500">Step {step} of 4</div>
+              </div>
             </div>
-          </div>
-          
-          <div className="card">
-            {renderStep()}
-          </div>
-        </div>
+          </>
+        )}
+
+        {/* Render the step content. */}
+        {renderStepContent()}
       </div>
     </div>
   );

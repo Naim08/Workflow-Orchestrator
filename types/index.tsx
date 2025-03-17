@@ -102,4 +102,25 @@ export interface TriggerParameter {
     description?: string;
   }
 
-  
+  export interface DLQItem {
+    id: string;
+    ruleId: string;
+    ruleName: string;
+    triggerId: string;
+    actionId: string;
+    error: string;
+    timestamp: string;
+    retryAttempts: number;
+    status: 'pending' | 'processing' | 'processed' | 'failed';
+    lastProcessedAt?: string;
+    processingResult?: any;
+    actionParams: Record<string, any>;
+    context?: Record<string, any>;
+    stackTrace?: string;
+  }
+
+  interface DeleteRequestBody {
+    status?: string;
+    olderThan?: number;
+    ids?: string[];
+  }
