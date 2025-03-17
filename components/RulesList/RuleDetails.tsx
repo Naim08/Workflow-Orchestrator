@@ -72,7 +72,7 @@ const RuleDetails: React.FC<RuleDetailsProps> = ({ rule, onEdit }) => {
         </div>
         
         <div className="mt-4">
-          <WorkflowCanvas rule={rule} />
+          <WorkflowCanvas rule={rule} key={rule.id} />
         </div>
       </div>
       

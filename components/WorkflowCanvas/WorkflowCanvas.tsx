@@ -60,7 +60,7 @@ const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({ rule }) => {
         schedule: rule.schedule,
         delay: rule.delay,
       } as ActionNodeData,
-      position: { x: 250, y: 300 },
+      position: { x: 350, y: 450 },
     },
   ] : [];
 
