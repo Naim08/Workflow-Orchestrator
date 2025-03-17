@@ -1,3 +1,4 @@
+// components/RuleBuilder/ActionSelector.tsx
 import React, { useState, useEffect } from 'react';
 import { getAllActions, getActionById } from '../../lib/actions';
 import { Action } from '../../types';
@@ -17,6 +18,8 @@ const ActionSelector: React.FC<ActionSelectorProps> = ({
 }) => {
   const [actions, setActions] = useState<Action[]>([]);
   const [selectedAction, setSelectedAction] = useState<Action | null>(null);
+  const [searchTerm, setSearchTerm] = useState<string>('');
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
   
   // Load all available actions
   useEffect(() => {
@@ -55,8 +58,7 @@ const ActionSelector: React.FC<ActionSelectorProps> = ({
   }, [selectedActionId]);
   
   // Handle action selection
-  const handleActionSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const actionId = e.target.value;
+  const handleActionSelect = (actionId: string) => {
     onSelectAction(actionId);
   };
   
@@ -191,36 +193,99 @@ const ActionSelector: React.FC<ActionSelectorProps> = ({
     }
   };
   
-  // Group actions by category
-  const actionsByCategory: Record<string, Action[]> = {};
-  actions.forEach(action => {
-    if (!actionsByCategory[action.category]) {
-      actionsByCategory[action.category] = [];
-    }
-    actionsByCategory[action.category].push(action);
+  // Get unique categories
+  const categories = ['all', ...new Set(actions.map(action => action.category))];
+  
+  // Filter actions based on search and category
+  const filteredActions = actions.filter(action => {
+    const matchesSearch = 
+      action.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+      action.description.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    const matchesCategory = selectedCategory === 'all' || action.category === selectedCategory;
+    
+    return matchesSearch && matchesCategory;
   });
   
+  // Group actions by category for display
+  const actionsByCategory: Record<string, Action[]> = {};
+  
+  if (selectedCategory === 'all') {
+    // Group by category when showing all
+    filteredActions.forEach(action => {
+      if (!actionsByCategory[action.category]) {
+        actionsByCategory[action.category] = [];
+      }
+      actionsByCategory[action.category].push(action);
+    });
+  } else {
+    // Just use the selected category
+    actionsByCategory[selectedCategory] = filteredActions;
+  }
+  
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div>
         <label className="block text-sm font-medium mb-1">Select Action *</label>
-        <select
-          value={selectedActionId}
-          onChange={handleActionSelect}
-          className="w-full border rounded px-3 py-2"
-          required
-        >
-          <option value="" disabled>Select an action</option>
-          {Object.entries(actionsByCategory).map(([category, categoryActions]) => (
-            <optgroup key={category} label={category.charAt(0).toUpperCase() + category.slice(1)}>
-              {categoryActions.map(action => (
-                <option key={action.id} value={action.id}>
-                  {action.name}
+        
+        {/* Search and filter */}
+        <div className="flex space-x-2 mb-4">
+          <div className="flex-1">
+            <input
+              type="text"
+              placeholder="Search actions..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full border rounded px-3 py-2"
+            />
+          </div>
+          <div className="w-1/3">
+            <select
+              value={selectedCategory}
+              onChange={(e) => setSelectedCategory(e.target.value)}
+              className="w-full border rounded px-3 py-2"
+            >
+              {categories.map(category => (
+                <option key={category} value={category}>
+                  {category === 'all' ? 'All Categories' : category.charAt(0).toUpperCase() + category.slice(1)}
                 </option>
               ))}
-            </optgroup>
-          ))}
-        </select>
+            </select>
+          </div>
+        </div>
+        
+        {/* Action selection boxes */}
+        {Object.entries(actionsByCategory).map(([category, categoryActions]) => (
+          <div key={category} className="mb-6">
+            <h3 className="text-sm font-medium text-gray-700 mb-2 capitalize">
+              {category}
+            </h3>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {categoryActions.map(action => (
+                <div
+                  key={action.id}
+                  onClick={() => handleActionSelect(action.id)}
+                  className={`
+                    p-3 rounded border cursor-pointer transition-all
+                    ${selectedActionId === action.id 
+                      ? 'border-blue-500 bg-blue-50 shadow-sm' 
+                      : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50/50'}
+                  `}
+                >
+                  <h4 className="font-medium text-sm">{action.name}</h4>
+                  <p className="text-xs text-gray-500 mt-1 line-clamp-2">{action.description}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+        
+        {filteredActions.length === 0 && (
+          <div className="text-center py-8 text-gray-500 border rounded bg-gray-50">
+            No actions found matching your search.
+          </div>
+        )}
       </div>
       
       {selectedAction && selectedAction.parameters.length > 0 && (

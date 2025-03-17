@@ -265,7 +265,7 @@ const RuleBuilder: React.FC<RuleBuilderProps> = ({
     e.preventDefault();
     
     if (!validateCurrentStep()) {
-      setError('Please fill in all required fields.');
+      //setError('Please fill in all required fields.');
       return;
     }
     

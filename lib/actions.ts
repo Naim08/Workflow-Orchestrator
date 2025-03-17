@@ -7,12 +7,16 @@ import {
 import { ActionError } from '@/types/errors';
 import { Action, ActionExecutionResult, Rule } from '../types';
 import supabase from './supabase';
+import hospitalityActions from './hospitalityActions';
 
 // Define available actions for the system
+
+// Combine existing actions with new hospitality actions
 const actions: Action[] = [
+  // Your existing actions
   {
     id: 'send_email',
-    name: 'Send an email',
+    name: 'Send Email',
     description: 'Sends an email to the specified recipient',
     category: 'communication',
     parameters: [
@@ -30,37 +34,49 @@ const actions: Action[] = [
       },
       {
         name: 'body',
-        type: 'text',
+        type: 'string',
         required: true,
-        description: 'Email body'
+        description: 'Email body content'
+      },
+      {
+        name: 'cc',
+        type: 'string',
+        required: false,
+        description: 'CC recipients (comma-separated)'
+      },
+      {
+        name: 'bcc',
+        type: 'string',
+        required: false,
+        description: 'BCC recipients (comma-separated)'
       }
     ]
   },
   {
-    id: 'send_slack',
-    name: 'Send Slack message',
-    description: 'Sends a message to a Slack channel',
+    id: 'send_sms',
+    name: 'Send SMS',
+    description: 'Sends an SMS message to the specified phone number',
     category: 'communication',
     parameters: [
       {
-        name: 'channel',
+        name: 'to',
         type: 'string',
         required: true,
-        description: 'Slack channel'
+        description: 'Phone number in E.164 format (e.g., +12065550100)'
       },
       {
         name: 'message',
-        type: 'text',
+        type: 'string',
         required: true,
-        description: 'Message text'
+        description: 'SMS message content'
       }
     ]
   },
   {
     id: 'create_task',
-    name: 'Create a task',
-    description: 'Creates a new task in the task management system',
-    category: 'task',
+    name: 'Create Task',
+    description: 'Creates a new task in the system',
+    category: 'productivity',
     parameters: [
       {
         name: 'title',
@@ -70,7 +86,7 @@ const actions: Action[] = [
       },
       {
         name: 'description',
-        type: 'text',
+        type: 'string',
         required: false,
         description: 'Task description'
       },
@@ -78,65 +94,52 @@ const actions: Action[] = [
         name: 'assignee',
         type: 'string',
         required: false,
-        description: 'Person assigned to the task'
+        description: 'User ID of the assignee'
       },
       {
         name: 'dueDate',
-        type: 'date',
+        type: 'datetime',
         required: false,
         description: 'Due date for the task'
+      },
+      {
+        name: 'priority',
+        type: 'string',
+        required: false,
+        description: 'Task priority (low, medium, high)',
+        default: 'medium'
       }
     ]
   },
   {
-    id: 'update_status',
-    name: 'Update status',
-    description: 'Updates the status of an entity',
-    category: 'system',
+    id: 'update_record',
+    name: 'Update Record',
+    description: 'Updates a record in the database',
+    category: 'data',
     parameters: [
       {
-        name: 'entityType',
+        name: 'table',
         type: 'string',
         required: true,
-        description: 'Type of entity (booking, property, etc.)'
+        description: 'Table name'
       },
       {
-        name: 'entityId',
+        name: 'recordId',
         type: 'string',
         required: true,
-        description: 'ID of the entity'
+        description: 'ID of the record to update'
       },
       {
-        name: 'status',
-        type: 'string',
+        name: 'fields',
+        type: 'object',
         required: true,
-        description: 'New status value'
+        description: 'Fields to update (key-value pairs)'
       }
     ]
   },
   {
-    id: 'send_sms',
-    name: 'Send SMS',
-    description: 'Sends an SMS to the specified phone number',
-    category: 'communication',
-    parameters: [
-      {
-        name: 'phoneNumber',
-        type: 'string',
-        required: true,
-        description: 'Recipient phone number'
-      },
-      {
-        name: 'message',
-        type: 'text',
-        required: true,
-        description: 'Message text'
-      }
-    ]
-  },
-  {
-    id: 'webhook',
-    name: 'Call webhook',
+    id: 'call_webhook',
+    name: 'Call Webhook',
     description: 'Makes an HTTP request to a webhook URL',
     category: 'integration',
     parameters: [
@@ -149,15 +152,53 @@ const actions: Action[] = [
       {
         name: 'method',
         type: 'string',
-        required: true,
-        description: 'HTTP method (GET, POST, etc.)',
+        required: false,
+        description: 'HTTP method (GET, POST, PUT, DELETE)',
         default: 'POST'
       },
       {
-        name: 'payload',
-        type: 'text',
+        name: 'headers',
+        type: 'object',
         required: false,
-        description: 'JSON payload'
+        description: 'HTTP headers (key-value pairs)'
+      },
+      {
+        name: 'body',
+        type: 'object',
+        required: false,
+        description: 'Request body (for POST and PUT)'
+      }
+    ]
+  },
+  {
+    id: 'notify_slack',
+    name: 'Notify Slack',
+    description: 'Sends a notification to a Slack channel',
+    category: 'communication',
+    parameters: [
+      {
+        name: 'channel',
+        type: 'string',
+        required: true,
+        description: 'Slack channel name'
+      },
+      {
+        name: 'message',
+        type: 'string',
+        required: true,
+        description: 'Message text'
+      },
+      {
+        name: 'username',
+        type: 'string',
+        required: false,
+        description: 'Bot username'
+      },
+      {
+        name: 'icon_emoji',
+        type: 'string',
+        required: false,
+        description: 'Emoji to use as the icon'
       }
     ]
   },
@@ -189,50 +230,96 @@ const actions: Action[] = [
         default: 'error' // Options: error, timeout, intermittent
       }
     ]
-  }
+  },
+  
+  // Add all new hospitality actions
+  ...hospitalityActions
 ];
+
+// Make sure any duplicate actions with the same ID get merged correctly
+const mergedActions = actions.reduce((acc, action) => {
+  const index = acc.findIndex(a => a.id === action.id);
+  if (index >= 0) {
+    // Replace with newer version if duplicate found
+    acc[index] = action;
+  } else {
+    // Add new action if no duplicate
+    acc.push(action);
+  }
+  return acc;
+}, [] as Action[]);
 
 // Get a list of all available actions
 export function getAllActions(): Action[] {
-  return actions;
+  return mergedActions;
 }
 
 // Get an action by ID
 export function getActionById(actionId: string): Action | undefined {
-  return actions.find(action => action.id === actionId);
+  return mergedActions.find(action => action.id === actionId);
 }
 
 // Get actions by category
 export function getActionsByCategory(category: string): Action[] {
-  return actions.filter(action => action.category === category);
+  return mergedActions.filter(action => action.category === category);
 }
 
 // Map a natural language action to an action ID
 export function mapNaturalLanguageToActionId(text: string): string {
   const lowerText = text.toLowerCase();
   
-  // Simple mapping based on keywords
+  // Simple mapping based on keywords - expanded for hospitality
+  if (lowerText.includes('email') && lowerText.includes('welcome')) {
+    return 'send_welcome_email';
+  }
+  if (lowerText.includes('email') && lowerText.includes('thank')) {
+    return 'send_thank_you_email';
+  }
+  if (lowerText.includes('email') && lowerText.includes('checkout')) {
+    return 'send_checkout_reminder';
+  }
   if (lowerText.includes('email')) {
     return 'send_email';
-  }
-  if (lowerText.includes('slack')) {
-    return 'send_slack';
-  }
-  if (lowerText.includes('task')) {
-    return 'create_task';
-  }
-  if (lowerText.includes('status')) {
-    return 'update_status';
   }
   if (lowerText.includes('sms') || lowerText.includes('text message')) {
     return 'send_sms';
   }
-  if (lowerText.includes('webhook') || lowerText.includes('http')) {
-    return 'webhook';
+  if (lowerText.includes('notify') && lowerText.includes('clean')) {
+    return 'notify_cleaning_staff';
+  }
+  if (lowerText.includes('notify') && lowerText.includes('front desk')) {
+    return 'notify_front_desk';
+  }
+  if (lowerText.includes('notify') && lowerText.includes('maintenance')) {
+    return 'notify_maintenance_team';
+  }
+  if (lowerText.includes('notify') && lowerText.includes('guest')) {
+    return 'send_guest_notification';
+  }
+  if (lowerText.includes('notify') && lowerText.includes('slack')) {
+    return 'notify_slack';
+  }
+  if (lowerText.includes('maintenance') && (lowerText.includes('task') || lowerText.includes('create'))) {
+    return 'create_maintenance_task';
+  }
+  if (lowerText.includes('upgrade') && lowerText.includes('room')) {
+    return 'offer_room_upgrade';
+  }
+  if (lowerText.includes('update') && lowerText.includes('booking')) {
+    return 'update_booking';
+  }
+  if (lowerText.includes('task')) {
+    return 'create_task';
+  }
+  if (lowerText.includes('webhook')) {
+    return 'call_webhook';
+  }
+  if (lowerText.includes('update')) {
+    return 'update_record';
   }
   
   // Default to the first action if no match found
-  return actions[0].id;
+  return mergedActions[0].id;
 }
 
 // Function to execute actions (mocked for MVP)

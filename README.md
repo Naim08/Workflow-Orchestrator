@@ -1,3 +1,5 @@
+
+
 # 🚀 Workflow Orchestrator
 
 A lightweight, extensible workflow orchestration tool built with **Next.js**, **Tailwind CSS**, and **React Flow**.
@@ -39,7 +41,7 @@ A lightweight, extensible workflow orchestration tool built with **Next.js**, **
 
 ### Prerequisites
 
-- Node.js 14+ and `pnpm`
+- Node.js 18+ and `pnpm`
 - Supabase account (for database)
 - OpenAI API Key (for AI features, optional)
 
@@ -104,6 +106,50 @@ Deploy on **DigitalOcean App Platform** with ease. See [`deploy-digitalocean.md`
 1. Go to the **Simulate** page
 2. Select trigger type + parameters
 3. Run simulation to preview workflow behavior
+
+---
+
+## 📋 Example (only few in app atm) Workflows
+
+| Trigger                          | Condition (Optional)                         | Action                                                | Action Type                  |
+|----------------------------------|----------------------------------------------|-------------------------------------------------------|------------------------------|
+| Guest checks in                  | If after 10 PM                               | Send a welcome email                                  | Immediate                    |
+| Guest checks out                 | No condition                                 | Notify cleaning staff                                 | Immediate                    |
+| Cleaning task completed         | No condition                                 | Notify front desk                                     | Immediate                    |
+| Guest requests late checkout     | If availability allows                       | Approve request and send confirmation                 | Immediate                    |
+| Guest leaves a review            | If rating > 4 stars                          | Send thank-you email with promo code                  | Immediate                    |
+| Smart lock battery low           | No condition                                 | Notify maintenance team                               | Immediate                    |
+| Noise level exceeds threshold    | If after 11 PM                               | Send warning notification to guest                    | Immediate                    |
+| Payment failed                   | No condition                                 | Notify admin and request alternative                  | Immediate                    |
+| Occupancy rate < 50%             | No condition                                 | Offer discounts via email                             | Scheduled (weekly)           |
+| Flight delay detected            | If guest arrival is same day                 | Update check-in time automatically                    | Immediate                    |
+| Severe weather warning issued    | No condition                                 | Notify guests with safety instructions                | Immediate                    |
+| New reservation booked           | No condition                                 | Send booking confirmation and welcome packet          | Immediate                    |
+| Guest requests housekeeping      | If within housekeeping hours                 | Create task for housekeeping staff                    | Immediate                    |
+| Room inspection completed        | If issues found                              | Notify maintenance team with issue details            | Immediate                    |
+| Maintenance request created      | No condition                                 | Create maintenance task and notify technician         | Immediate                    |
+| Maintenance request overdue      | Over 24 hours                                | Escalate to admin with priority status                | Scheduled (daily)            |
+| Guest Wi-Fi usage exceeds limit  | No condition                                 | Notify guest and offer data upgrade                   | Immediate                    |
+| Guest requests early check-in    | If room ready                                | Approve request and notify guest                      | Immediate                    |
+| Reservation modified             | No condition                                 | Notify front desk and update schedule                 | Immediate                    |
+| Reservation conflict detected    | No condition                                 | Flag for review and notify admin                      | Immediate                    |
+| Guest cancels reservation        | If within penalty-free window                | Process cancellation and confirm refund               | Immediate                    |
+| Guest opens support ticket       | No condition                                 | Assign to support staff and send acknowledgment       | Immediate                    |
+| Guest extends stay               | No condition                                 | Update booking and notify cleaning schedule           | Immediate                    |
+| ID verification pending          | More than 12 hours after request             | Send verification reminder to guest                   | Scheduled (daily)            |
+| Security motion detected         | If after 12 AM and in restricted zone        | Alert security team                                   | Immediate                    |
+| Noise level normalizes           | After previous warning                       | Send thank-you message to guest                       | Immediate                    |
+| Carbon monoxide detected         | No condition                                 | Trigger alarm, notify guests and emergency contacts   | Immediate                    |
+| Thermostat adjusted manually     | If outside comfort range                     | Reset to default or notify admin                      | Immediate                    |
+| VIP guest arriving               | No condition                                 | Notify staff to prepare VIP amenities                 | Scheduled (2h before check-in)|
+| Supply inventory low             | Below threshold                              | Notify procurement to reorder supplies                | Scheduled (daily)            |
+| Loyalty milestone reached        | No condition                                 | Send personalized reward email                        | Immediate                    |
+| Staff shift change scheduled     | No condition                                 | Send shift reminder to staff                          | Scheduled (daily)            |
+| Guest has upcoming checkout      | 24 hours before checkout                     | Send checkout instructions and feedback form          | Scheduled (24h before)       |
+| Local event near property        | No condition                                 | Send guests event details and travel tips             | Scheduled (48h before event) |
+| Smart device offline             | No condition                                 | Notify admin and suggest troubleshooting steps        | Immediate                    |
+| Power outage detected            | No condition                                 | Alert maintenance and notify affected guests          | Immediate                    |
+| Emergency alert triggered        | No condition                                 | Notify emergency services and all staff               | Immediate                    |
 
 ---
 
